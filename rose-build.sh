@@ -30,10 +30,21 @@ android {
         applicationId "com.husain.rose"
         minSdk 23
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode((System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger())
+        versionName "1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "1")
     }
-    buildTypes { release { minifyEnabled false } }
+    signingConfigs {
+        rose {
+            storeFile file('rose.jks')
+            storePassword 'rose2026key'
+            keyAlias 'rose'
+            keyPassword 'rose2026key'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.rose }
+        release { minifyEnabled false; signingConfig signingConfigs.rose }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -243,7 +254,13 @@ public class MainActivity extends Activity {
         });
 
         if (state != null) web.restoreState(state);
-        else web.loadUrl(URL);
+        else {
+            // نطلب الصفحة جديدة من GitHub في كل تشغيل، بدل النسخة المحفوظة في الهاتف
+            java.util.Map<String, String> noCache = new java.util.HashMap<>();
+            noCache.put("Cache-Control", "no-cache");
+            noCache.put("Pragma", "no-cache");
+            web.loadUrl(URL + "?t=" + System.currentTimeMillis(), noCache);
+        }
     }
 
     String readAsset(String name) {
@@ -372,6 +389,7 @@ ROSE_EOF
 echo "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" | base64 -d > ic.png
 for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do cp ic.png app/src/main/res/mipmap-$d/ic_launcher.png; done
 rm ic.png
+echo "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" | base64 -d > app/rose.jks
 
 gradle assembleDebug --no-daemon --stacktrace
 cp app/build/outputs/apk/debug/app-debug.apk ../Rose.apk
