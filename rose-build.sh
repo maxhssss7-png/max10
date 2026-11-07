@@ -2,7 +2,7 @@
 # يبني تطبيق Rose لأندرويد (APK) — يفتح https://maxhssss7-png.github.io/max/sh.html
 set -euo pipefail
 rm -rf p && mkdir -p p && cd p
-mkdir -p app/src/main/java/com/husain/rose app/src/main/assets app/src/main/res/values
+mkdir -p app/src/main/java/com/husain/rose app/src/main/assets app/src/main/res/values app/src/main/res/xml
 for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do mkdir -p app/src/main/res/mipmap-$d; done
 
 cat > settings.gradle <<'ROSE_EOF'
@@ -50,7 +50,10 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
-dependencies { implementation 'androidx.webkit:webkit:1.11.0' }
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'androidx.core:core:1.13.1'
+}
 ROSE_EOF
 
 cat > app/src/main/AndroidManifest.xml <<'ROSE_EOF'
@@ -82,6 +85,15 @@ cat > app/src/main/AndroidManifest.xml <<'ROSE_EOF'
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.husain.rose.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>
 ROSE_EOF
@@ -95,6 +107,13 @@ cat > app/src/main/res/values/styles.xml <<'ROSE_EOF'
         <item name="android:navigationBarColor">@color/rose_bg</item>
     </style>
 </resources>
+ROSE_EOF
+
+cat > app/src/main/res/xml/file_paths.xml <<'ROSE_EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>
 ROSE_EOF
 
 cat > app/src/main/assets/bridge.js <<'ROSE_EOF'
@@ -356,6 +375,36 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void stopListen() {
             runOnUiThread(() -> { if (recognizer != null) recognizer.stopListening(); });
+        }
+
+        // مشاركة ملف التطبيق نفسه (Rose.apk) عبر واتساب أو تيليجرام أو غيرها
+        @JavascriptInterface
+        public void shareApp() {
+            new Thread(() -> {
+                try {
+                    java.io.File src = new java.io.File(getApplicationInfo().sourceDir);
+                    java.io.File dir = new java.io.File(getCacheDir(), "share");
+                    dir.mkdirs();
+                    java.io.File out = new java.io.File(dir, "Rose.apk");
+                    try (InputStream in = new java.io.FileInputStream(src);
+                         java.io.OutputStream os = new java.io.FileOutputStream(out)) {
+                        byte[] buf = new byte[65536];
+                        int n;
+                        while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+                    }
+                    final Uri uri = androidx.core.content.FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".files", out);
+                    runOnUiThread(() -> {
+                        Intent i = new Intent(Intent.ACTION_SEND);
+                        i.setType("application/vnd.android.package-archive");
+                        i.putExtra(Intent.EXTRA_STREAM, uri);
+                        i.putExtra(Intent.EXTRA_TEXT, "تطبيق Rose للخرائط والتوجيه في العراق");
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "شارك Rose عبر"));
+                    });
+                } catch (Exception e) {
+                    js("window.__roseToast&&window.__roseToast('تعذّرت مشاركة التطبيق')");
+                }
+            }).start();
         }
 
         @JavascriptInterface
